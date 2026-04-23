@@ -285,9 +285,8 @@
     </style>
 </head>
 <body>
-
-<!-- Логотип для вызова админки (5 кликов) -->
-<div class="logo-click" id="adminLogo">KIRILL BARYSHEV</div>
+<!-- Обычный контент страницы -->
+<div id="pageContent">
 
 <!-- О себе + города -->
 <section id="about" class="container">
@@ -307,7 +306,7 @@
         </div>
     </div>
 </section>
-
+</div>
 <!-- Цены -->
 <section id="prices" class="container">
     <h2>Стоимость услуг</h2>
@@ -371,7 +370,7 @@
 </div>
 
 <!-- Админ панель -->
-<div id="adminPanel" class="admin-panel">
+<div id="adminPanel" class="admin-panel" style="display:none;">
     <h2>🔐 Админ-панель</h2>
     <input type="password" id="adminPass" placeholder="Пароль">
     <button onclick="checkAdminPass()" class="btn-primary">Войти</button>
