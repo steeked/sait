@@ -406,9 +406,9 @@
 </footer>
 
 <script>
-    // ==================== КОНФИГ SUPABASE (ЗАМЕНИТЕ) ====================
-    const SUPABASE_URL = 'https://fnecwybaqycmnubrvihc.supabase.co/rest/v1/';
-    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZuZWN3eWJhcXljbW51YnJ2aWhjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY3ODMzMjgsImV4cCI6MjA5MjM1OTMyOH0.yz5h9dPyq5ugrhSBPnFe1af0rOw7DAI5p_Px8d2nTyA';
+    // ==================== КОНФИГ SUPABASE ====================
+    const SUPABASE_URL = 'https://fnecwybaqycmnubrvihc.supabase.co';
+    const SUPABASE_KEY = 'your-key-here';
     const supabase = supabaseJs.createClient(SUPABASE_URL, SUPABASE_KEY);
 
     // ==================== ПРАЙС ====================
@@ -420,13 +420,6 @@
     };
 
     let currentDiscount = 0;
-    let pendingPromo = null;
-
-    function getDiscountByYear(createdYear) {
-        if (createdYear <= 2025) return 0;
-        let step = (createdYear - 2025) * 10 - 5;
-        return Math.min(step, 50);
-    }
 
     function renderPrices() {
         const renderBlock = (data, containerId) => {
@@ -453,153 +446,25 @@
         document.getElementById('discountStatus').innerText = statusText;
     }
 
-    function formatPhoneNumber(input) {
-        let digits = input.replace(/\D/g, '');
-        if (digits.length > 10) digits = digits.slice(0,10);
-        let formatted = '+7 ';
-        if (digits.length > 0) formatted += '(' + digits.slice(0,3);
-        if (digits.length >= 4) formatted += ') ' + digits.slice(3,6);
-        if (digits.length >= 7) formatted += '-' + digits.slice(6,8);
-        if (digits.length >= 9) formatted += '-' + digits.slice(8,10);
-        return formatted.trim();
+    // ==================== РЕАЛИЗАЦИЯ ОТКРЫТИЯ АДМИН-ПАНЕЛИ ====================
+    if (window.location.pathname === '/admin') {
+        document.getElementById('adminPanel').style.display = 'block';
+        document.getElementById('pageContent').style.display = 'none';
     }
 
-    function initPhoneMask() {
-        const phoneInput = document.getElementById('leadPhone');
-        if (!phoneInput) return;
-        phoneInput.addEventListener('input', (e) => {
-            let raw = e.target.value.replace(/\D/g, '');
-            if (raw.startsWith('7')) raw = raw.slice(1);
-            e.target.value = formatPhoneNumber(raw);
-        });
-    }
-
-    const promoModal = document.getElementById('promoModal');
-    window.closeModal = () => { promoModal.style.display = 'none'; pendingPromo = null; };
-
-    document.getElementById('applyPromoBtn').onclick = async () => {
-        const code = document.getElementById('promoCodeInput').value.trim();
-        if (!code) return alert('Введите промокод');
-        const { data, error } = await supabase
-            .from('promocodes')
-            .select('*')
-            .eq('code', code)
-            .eq('is_active', true)
-            .single();
-        if (error || !data) return alert('Промокод не найден');
-        if (data.current_uses >= data.max_uses) return alert('Промокод уже использован');
-        
-        const createdYear = new Date(data.created_at).getFullYear();
-        const discountByYear = getDiscountByYear(createdYear);
-        
-        pendingPromo = { id: data.id, discount: discountByYear, code };
-        document.getElementById('modalPromoCode').innerText = `${code} (скидка ${discountByYear}%)`;
-        promoModal.style.display = 'flex';
-    };
-
-    document.getElementById('confirmPromoBtn').onclick = async () => {
-        if (!pendingPromo) return;
-        const name = document.getElementById('leadName').value.trim();
-        let phoneRaw = document.getElementById('leadPhone').value.trim();
-        const wishes = document.getElementById('leadWishes').value;
-        if (!name || !phoneRaw) return alert('Имя и телефон обязательны');
-        
-        const { error: leadError } = await supabase
-            .from('leads')
-            .insert([{ name, phone: phoneRaw, wishes, promocode_id: pendingPromo.id, discount_applied: pendingPromo.discount }]);
-        if (leadError) return alert('Ошибка: ' + leadError.message);
-        
-        await supabase.rpc('increment_uses', { promo_id: pendingPromo.id });
-        
-        currentDiscount = pendingPromo.discount;
-        renderPrices();
-        localStorage.setItem('activeDiscount', currentDiscount);
-        alert(`Скидка ${currentDiscount}% активирована!`);
-        closeModal();
-        document.getElementById('promoCodeInput').value = '';
-        pendingPromo = null;
-    };
-
-    // АДМИНКА
-    const adminPanel = document.getElementById('adminPanel');
-    window.toggleAdmin = () => adminPanel.classList.toggle('active');
-    window.checkAdminPass = () => {
+    // ==================== ПРОВЕРКА ПАРОЛЯ И ДОСТУП ====================
+    function checkAdminPass() {
         const pass = document.getElementById('adminPass').value;
         if (pass === 'admin123') {
             document.getElementById('adminContent').style.display = 'block';
-            loadAdminData();
-            loadGiftCertificates();
-        } else alert('Неверный пароль');
-    };
-    
-    async function loadAdminData() {
-        const { data: promos } = await supabase.from('promocodes').select('*');
-        const promoDiv = document.getElementById('promoList');
-        promoDiv.innerHTML = promos.map(p => {
-            const year = new Date(p.created_at).getFullYear();
-            const autoDiscount = getDiscountByYear(year);
-            return `<p>${p.code} | автоскидка ${autoDiscount}% | использован ${p.current_uses}/${p.max_uses} | создан ${year}</p>`;
-        }).join('');
-        const { data: leads } = await supabase.from('leads').select('*');
-        const leadsDiv = document.getElementById('leadsList');
-        leadsDiv.innerHTML = leads.map(l => `<p><strong>${l.name}</strong> | ${l.phone} | ${l.wishes ? l.wishes.slice(0,50) : ''} | скидка ${l.discount_applied || '—'}% | ${new Date(l.created_at).toLocaleDateString()}</p>`).join('');
-    }
-    
-    async function loadGiftCertificates() {
-        const { data: gifts } = await supabase.from('gift_certificates').select('*');
-        const giftDiv = document.getElementById('giftList');
-        if (gifts && gifts.length) {
-            giftDiv.innerHTML = gifts.map(g => `<p>🎁 ${g.name} — ${g.value} | код: ${g.code} | ${new Date(g.created_at).toLocaleDateString()}</p>`).join('');
         } else {
-            giftDiv.innerHTML = '<p>Пока нет сертификатов</p>';
+            alert('Неверный пароль');
         }
     }
-    
-    window.createPromocode = async () => {
-        const code = 'WED' + Math.random().toString(36).substr(2, 6).toUpperCase();
-        const { error } = await supabase.from('promocodes').insert([{
-            code, discount_percent: 0, max_uses: 1, current_uses: 0, is_active: true
-        }]);
-        if (error) alert('Ошибка: ' + error.message);
-        else {
-            alert(`Промокод ${code} создан!`);
-            const qrDiv = document.getElementById('qrResult');
-            qrDiv.innerHTML = '';
-            new QRCode(qrDiv, { text: code, width: 120, height: 120 });
-            loadAdminData();
-        }
-    };
-    
-    window.createGiftCertificate = async () => {
-        const name = document.getElementById('giftName').value.trim();
-        const value = document.getElementById('giftValue').value.trim();
-        if (!name || !value) return alert('Заполните название и номинал');
-        const code = 'GIFT' + Math.random().toString(36).substr(2, 8).toUpperCase();
-        const { error } = await supabase.from('gift_certificates').insert([{
-            code, name, value, is_activated: false
-        }]);
-        if (error) alert('Ошибка: ' + error.message);
-        else {
-            alert(`Сертификат создан! Код: ${code}`);
-            const qrDiv = document.getElementById('giftQrResult');
-            qrDiv.innerHTML = '';
-            new QRCode(qrDiv, { text: `Сертификат: ${code}\n${name}\n${value}`, width: 140, height: 140 });
-            loadGiftCertificates();
-            document.getElementById('giftName').value = '';
-            document.getElementById('giftValue').value = '';
-        }
-    };
-    
-    window.exportLeads = () => { alert('Экспорт CSV — можно скачать из дашборда Supabase'); };
-    window.closeAdmin = () => adminPanel.classList.remove('active');
 
-    let clickCount = 0;
-    document.getElementById('adminLogo').onclick = () => { clickCount++; if (clickCount === 5) toggleAdmin(); };
-
+    // ==================== ИНИЦИАЛИЗАЦИЯ ПРИ ЗАГРУЗКЕ ====================
     window.onload = () => {
-        initPhoneMask();
         renderPrices();
-        document.getElementById('photographerImage').src = "https://placehold.co/600x800/f0eae5/b48c6c?text=Ваше+фото";
     };
 </script>
 
